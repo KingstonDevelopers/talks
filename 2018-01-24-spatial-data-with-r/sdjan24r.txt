@@ -1,0 +1,207 @@
+#### spatial data in R ####
+
+#### useful packages ####
+library(sp); library(rgdal); library(raster)
+
+#### remote sensing data (landsat 8 over kingston) downloaded from earthexplorer.usgs.gov ####
+
+#### set working directory ####
+setwd("C:/Users/EST-1986/Desktop/QUBS/QUBS_L8")
+
+#### import and check data ####
+path2016 <- "C:/Users/EST-1986/Desktop/QUBS/QUBS_L8/LC08__20160826"
+LTS2016 <- list.files(path2016, pattern=".tif$", full.names = TRUE)
+LTS2016
+
+path2017 <- "C:/Users/EST-1986/Desktop/QUBS/QUBS_L8/LC08_20170813"
+LTS2017 <- list.files(path2017, pattern = ".tif$", full.names = TRUE)
+LTS2017
+
+#### create a raster stack for 2016 and 2017 ####
+#basically, makes a list of raster layers
+stack2016<-stack(LTS2016[4:9])
+stack2017<-stack(LTS2017[4:9])
+
+#### check metadata (crs, bb, etc) ####
+
+#### view coordinate reference system ####
+crs(stack2016)
+crs(stack2017)
+
+#### view bounding box (or extent) ####
+bbox(stack2016)
+bbox(stack2017)
+extent(stack2016)
+extent(stack2017)
+
+#### view dimensions ####
+dim(stack2016)
+dim(stack2017)
+
+#### view resolution (grain or pixel size), corresponds to on the ground ####
+res(stack2016)
+res(stack2017)
+
+#### panchromatic (b/w) band has higher spatial resolution ####
+res(raster(LTS2016[10]))
+res(raster(LTS2017[10]))
+
+#### visualize individual bands ####
+plot(stack2016, col=grey(1:100/100))
+plot(stack2017, col=grey(1:100/100))
+
+#### bands can be combined in a number of different ways for different analyses ####
+
+#### make and rgb (natural colour) composite ####
+# bands 4 (red), 3 (blue), 2 (green)
+plotRGB(stack(stack2016[[1]],stack2016[[2]],stack2016[[3]]), r=3,g=2,b=1, stretch="hist")
+plotRGB(stack(stack2017[[1]],stack2017[[2]],stack2017[[3]]), r=3,g=2,b=1, stretch="hist")
+
+#### crop extent ####
+crop1stack2016 <- crop(stack2016, extent(390000,450000,4900000,4950000))
+crop1stack2017 <- crop(stack2017, extent(390000,450000,4900000,4950000))
+
+### replot rgb with new extents ####
+plotRGB(stack(crop1stack2016[[1]],crop1stack2016[[2]],crop1stack2016[[3]]), r=3,g=2,b=1, stretch="hist")
+plotRGB(stack(crop1stack2017[[1]],crop1stack2017[[2]],crop1stack2017[[3]]), r=3,g=2,b=1, stretch="hist")
+
+#### crop extent (again) ####
+crop2stack2016 <- crop(stack2016, extent(390000,400000,4900000,4910000))
+crop2stack2017 <- crop(stack2017, extent(390000,400000,4900000,4910000))
+
+### replot (again) rgb with new extents ####
+plotRGB(stack(crop2stack2016[[1]],crop2stack2016[[2]],crop2stack2016[[3]]), r=3,g=2,b=1, stretch="hist")
+plotRGB(stack(crop2stack2017[[1]],crop2stack2017[[2]],crop2stack2017[[3]]), r=3,g=2,b=1, stretch="hist")
+
+#### make a false colour composite ####
+# bands 7 (shortwave infrared i), 6 (shortwave infrared ii), 4 (red)
+plotRGB(stack(stack2016[[3]],stack2016[[5]],stack2016[[6]]), r=1,g=2,b=3, stretch="hist")
+plotRGB(stack(stack2017[[3]],stack2017[[5]],stack2017[[6]]), r=1,g=2,b=3, stretch="hist")
+
+#### visualize healthy vegetation ####
+# bands 5 (near infrared), 6 (shortwave infrared ii), 2 (blue)
+plotRGB(stack(stack2016[[4]],stack2016[[5]],stack2016[[1]]), r=3,g=2,b=1, stretch="hist")
+plotRGB(stack(stack2017[[4]],stack2017[[5]],stack2017[[1]]), r=3,g=2,b=1, stretch="hist")
+
+#### show land/water divide ####
+# bands 5 (near infrared), 6 (shortwave infrared ii), 4 (red)
+plotRGB(stack(stack2016[[4]],stack2016[[5]],stack2016[[3]]), r=3,g=2,b=1, stretch="hist")
+plotRGB(stack(stack2017[[4]],stack2017[[5]],stack2017[[3]]), r=3,g=2,b=1, stretch="hist")
+
+#### calculate normalized difference vegetation index (ndvi) ####
+# ndvi = near infrared - red / near infrared + red
+# shows presence (+ve) or absence (-ve) of vegetation
+
+# 2016
+stack2016@layers # check layers (to make sure you select the right ones)
+# near infrared = b5 (4, in the stack) AND red = b4 (3, in the stack)
+ndvi2016 <- (stack2016[[4]]- stack2016[[3]]) / (stack2016[[4]]+ stack2016[[3]])
+plot(ndvi2016)
+hist(ndvi2016, xlab="NDVI values")
+
+# 2017
+stack2017@layers # check layers (to make sure you select the right ones)
+# near infrared = b5 (4, in the stack) AND red = b4 (3, in the stack)
+ndvi2017 <- (stack2017[[4]]- stack2017[[3]]) / (stack2017[[4]]+ stack2017[[3]])
+plot(ndvi2017)
+hist(ndvi2017, xlab="NDVI values")
+
+#### plot to the same smallest extent from before ####
+plot(crop(ndvi2016, extent(390000,400000,4900000,4910000)))
+plot(crop(ndvi2017, extent(390000,400000,4900000,4910000)))
+
+##### plot side-by-side, showing separation at 0 (presence/absence)
+par(mfrow = c(1, 2)) 
+plot(ndvi2016, main="2016",col=heat.colors(2))
+plot(ndvi2017, main="2017",col=heat.colors(2))
+par(mfrow = c(1, 1)) 
+
+#### year-to-year difference ####
+# +ve values represent vegetation gain
+# -ve values represent vegetation loss
+ndvidiff <- ndvi2017-ndvi2016
+plot(ndvidiff) 
+# can see a vegetation gain from drought to wet years
+
+#### create a water mask ####
+# if you did a statistical analysis without removing water results would be wrong
+# because ndvi is an index of vegetation on land
+plot(stack2017[[2]], col=grey(1:10/10)) #using b3 (green)
+hist(stack2017[[2]])
+water <- reclassify(stack2017[[2]], c(-Inf,7500,NA,7500,Inf,1)) # reclassify values as NA or 1
+plot(water)
+
+#### apply water mask ####
+maskedndvi <- water * ndvidiff
+plot(maskedndvi)
+plot(maskedndvi,col=rainbow(7))
+
+#### compute basic statistics and reclassify ####
+stdev <- cellStats(maskedndvi, stat=sd)
+mean <- cellStats(maskedndvi, stat=mean)
+meanndvi<- reclassify(maskedndvi, c(-Inf,mean,0,mean,Inf,1)) #reclassify as 0 or 1
+plot(meanndvi,col=heat.colors(2)) # shows values greater or lesser than mean ndvi
+
+
+## -------------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------------------------------
+
+
+#### open data from cec.org (commission for env coop) ####
+#### co2pts shows power plant co2 emissions ####
+#### boundaries shows north america administrative divisions ####
+
+##### import vector shapefiles forco2 and political boundaries ####
+co2pts<-shapefile(file.choose()) 
+boundaries <- shapefile(file.choose()) 
+#recognizes shapefile class (pts, lines) even when same command used
+#can also use readOGR function from rgdal to read shapefile
+
+#### check coordinate reference system ####
+crs(co2pts)
+crs(boundaries)
+
+#### check bounding box (extent) ####
+bbox(co2pts)
+bbox(boundaries) 
+extent(co2pts)
+extent(boundaries)
+
+#### check what the files look like ####
+plot(co2pts) #file we are interested in analyzing
+
+#with reference to a boundary map
+par(mfrow = c(1, 2)) #plot side-by-side
+plot(co2pts)
+plot(boundaries)
+par(mfrow = c(1, 1)) #reset to default
+
+### overlay factory locations with boundaries ####
+plot(boundaries)
+points(co2pts, cex=.25, pch=16, col="red") #graphical parameters can be editted
+
+#### select only points from canada using attribute table ####
+can_co2pts<-co2pts[co2pts$Country=="Canada",]
+#creates a new dataset with only points in Canada
+plot(can_co2pts, cex=.9, pch=10, col="red")
+lines(boundaries, col="grey") #check with boundaries
+
+#### extract attributes from shapefile to dataframe and check it out ####
+candf <- data.frame(can_co2pts)
+summary(candf)
+str(candf)
+head(candf) 
+# or can click on data in global env window to open table
+
+#### can perform statistical analysis on extracted dataframe ####
+model1 <- lm(Gen_Cap_MW ~ CO2_EmRate, data = candf); anova(model1)
+model2 <- lm(Gen_Cap_MW ~ N2O_EmRate, data = candf); anova(model2)
+model3 <- lm(Gen_Cap_MW ~ CO2_EmRate + N2O_EmRate + CO2_EmRate:N2O_EmRate, data = candf); anova(model3)
